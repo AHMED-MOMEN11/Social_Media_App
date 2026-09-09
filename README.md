@@ -1,5 +1,7 @@
 # Social Media App
 
+**🌐 Live Demo:** [https://social-media-5ovjhs9rc-ahmed-ae4e.vercel.app](https://social-media-5ovjhs9rc-ahmed-ae4e.vercel.app)
+
 A dynamic frontend application built with Vite, vanilla JavaScript, and Bootstrap 5. It integrates with a RESTful API to provide core social media features like user authentication, creating posts, viewing feeds, and interacting through comments.
 
 ## 🚀 Features
