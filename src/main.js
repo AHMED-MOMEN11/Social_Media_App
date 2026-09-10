@@ -18,7 +18,9 @@ const state = {
   lastPage: 1,
   isLoading: false,
   refreshAfterLoad: false,
-  currentPostId: null
+  currentPostId: null,
+  currentRoute: 'home',
+  profileUserId: null,
 };
 
 // ==========================================
@@ -124,14 +126,27 @@ function isPostOwner(post, user = getAuthenticatedUser()) {
   );
 }
 
-function refreshFeedForAuthChange() {
+/**
+ * Re-renders whatever page the user is currently on.
+ * Home → refresh the paginated feed.
+ * Profile → re-fetch the profile (so owner actions update).
+ */
+function refreshCurrentView() {
+  if (state.currentRoute === 'profile' && state.profileUserId) {
+    renderProfilePage(state.profileUserId);
+    return;
+  }
+
+  // Home route
   if (state.isLoading) {
     state.refreshAfterLoad = true;
     return;
   }
-
   fetchAndRenderPosts(1);
 }
+
+// Keep the old name as an alias so nothing else has to change
+const refreshFeedForAuthChange = refreshCurrentView;
 
 function handleExpiredSession(message = 'Your session has expired. Please log in again.') {
   clearAuthSession();
@@ -191,30 +206,31 @@ window.PostId = function (id) {
 function renderAppSkeleton() {
   document.querySelector('#app').innerHTML = `
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-md navbar-light bg-white border-bottom sticky-top py-2 shadow-sm">
-      <div class="container max-w-screen-md">
-        <a class="navbar-brand fw-bold text-primary fs-4 tracking-wide" href="/" onclick="window.location.reload()">
-          <i class="bi bi-hexagon-fill me-1"></i>LOREM
-        </a>
+<nav class="navbar navbar-expand-md navbar-light bg-white border-bottom sticky-top py-2 shadow-sm">
+  <div class="container max-w-screen-md">
+    <a class="navbar-brand fw-bold text-primary fs-4 tracking-wide" href="#/">
+      <i class="bi bi-hexagon-fill me-1"></i>LOREM
+    </a>
 
-        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse"
-          data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
+    <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse"
+      data-bs-target="#navbarContent" aria-controls="navbarContent" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-        <div class="collapse navbar-collapse" id="navbarContent">
-          <ul class="navbar-nav mx-auto mb-2 mb-md-0 gap-md-1">
-            <li class="nav-item">
-              <a class="nav-link active fw-semibold text-primary px-3 rounded-pill bg-light" aria-current="page" href="/" onclick="window.location.reload()">
-                <i class="bi bi-house-door-fill me-1"></i>Home
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link fw-medium text-secondary px-3" href="/profile.html">
-                <i class="bi bi-person-fill me-1"></i>Profile
-              </a>
-            </li>
-          </ul>
+    <div class="collapse navbar-collapse" id="navbarContent">
+      <ul class="navbar-nav mx-auto mb-2 mb-md-0 gap-md-1">
+        <li class="nav-item">
+          <a class="nav-link active fw-semibold text-primary px-3" id="home-nav-link" href="#/">
+  <i class="bi bi-house-door-fill me-1"></i>Home
+</a>
+        </li>
+        <!-- Hidden until the visitor is signed in -->
+        <li class="nav-item" id="profile-nav-item" style="display: none;">
+  <a class="nav-link fw-medium text-secondary px-3" id="profile-nav-link" href="#/">
+    <i class="bi bi-person-fill me-1"></i>Profile
+  </a>
+</li>
+      </ul>
 
           <div class="d-flex align-items-center gap-2 pt-2 pt-md-0" id="nav-btns">
             <button type="button" class="btn btn-light text-secondary rounded-circle p-2 mx-2" id="themeToggle" aria-label="Toggle theme">
@@ -520,11 +536,38 @@ function updateNavigationUI() {
     const logoutContainer = document.getElementById('logout-container');
     if (logoutContainer) logoutContainer.remove();
   }
+
+  // Profile link: visible only for signed-in users
+  const profileNavItem = document.getElementById('profile-nav-item');
+  if (profileNavItem) {
+    profileNavItem.style.display =
+      userData && state.token ? 'block' : 'none';
+  }
+
+  // Wire the profile link to the logged-in user's own profile
+  const profileLink = document.getElementById('profile-nav-link');
+  if (profileLink) {
+    profileLink.onclick = (event) => {
+      event.preventDefault();
+      const me = getAuthenticatedUser();
+      if (me) {
+        window.location.hash = `#/profile/${me.id}`;
+      } else {
+        renderToastAlert('Please log in to view your profile.', 'failed');
+      }
+    };
+  }
 }
 
 function renderCreatePostWidget() {
   const createPostContainer = document.getElementById('AddPostContainer');
   if (!createPostContainer) return;
+
+  // Never show the composer while viewing someone's profile
+  if (state.currentRoute === 'profile') {
+    createPostContainer.innerHTML = '';
+    return;
+  }
 
   const userData = getStoredUser();
 
@@ -720,21 +763,23 @@ function createPostCardHTML(post) {
   return `
     <article id="post-${post.id}" class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
   <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between pt-3 px-3">
-    <div class="d-flex align-items-center gap-2">
-      <img src="${getAvatarUrl(post.author.profile_image)}" 
-           alt="avatar" 
-           class="rounded-circle border border-2 border-primary-subtle" 
-           style="width: 42px; height: 42px; object-fit: cover;" 
-           onerror="this.onerror=null;this.src='${FALLBACK_AVATAR}';">
-      <div>
-        <h6 class="mb-0 fw-bold text-dark fs-6">${escapeHTML(post.author.name)}</h6>
-        <small class="text-muted" style="font-size: 0.75rem;">${escapeHTML(post.author.email)}</small>
-      </div>
+  <button type="button"
+          class="btn p-0 border-0 bg-transparent d-flex align-items-center gap-2 author-link text-start"
+          data-user-id="${escapeHTML(post.author.id)}"
+          aria-label="View ${escapeHTML(post.author.name)}'s profile">
+    <img src="${getAvatarUrl(post.author.profile_image)}"
+         alt="avatar"
+         class="rounded-circle border border-2 border-primary-subtle"
+         style="width: 42px; height: 42px; object-fit: cover;"
+         onerror="this.onerror=null;this.src='${FALLBACK_AVATAR}';">
+    <div>
+      <h6 class="mb-0 fw-bold text-dark fs-6">${escapeHTML(post.author.name)}</h6>
+      <small class="text-muted" style="font-size: 0.75rem;">${escapeHTML(post.author.email)}</small>
     </div>
+  </button>
 
-    ${ownerActions}
-
-  </div>
+  ${ownerActions}
+</div>
   ${imageHtml}
   <div class="card-body px-3 pt-3 pb-2">
     <div class="d-flex align-items-center justify-content-between text-muted fs-7 mb-2 px-1">
@@ -1170,6 +1215,211 @@ function initializeCommentForm() {
 }
 
 // ==========================================
+// PROFILE PAGE ROUTER & RENDERER
+// ==========================================
+
+/**
+ * Returns the userId from the current hash, or null when on the home route.
+ * Supports:  #/        → home
+ *            #/profile/:id → profile page
+ */
+function parseProfileRoute() {
+  const hash = window.location.hash || '';
+  const match = hash.match(/^#\/profile\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+// ==========================================
+// PROFILE PAGE RENDERER
+// ==========================================
+
+function renderProfileHeader(user) {
+  const name = escapeHTML(user.name || user.username || 'User');
+  const username = escapeHTML(user.username || '');
+  const email = escapeHTML(user.email || '');
+
+  const postsCount =
+    user.posts_count ?? user.postsCount ?? (Array.isArray(user.posts) ? user.posts.length : 0);
+  const commentsCount =
+    user.comments_count ?? user.commentsCount ?? 0;
+
+  return `
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-body-tertiary overflow-hidden">
+      <div class="card-body p-4">
+        <div class="d-flex flex-column flex-sm-row align-items-center gap-4">
+          <img src="${getAvatarUrl(user.profile_image)}"
+               onerror="this.onerror=null;this.src='${FALLBACK_AVATAR}';"
+               alt="${name}"
+               class="rounded-circle border border-3 border-primary-subtle shadow-sm"
+               style="width: 110px; height: 110px; object-fit: cover;">
+
+          <div class="text-center text-sm-start flex-grow-1">
+            <h3 class="fw-bold mb-1">${name}</h3>
+            ${username ? `<p class="text-secondary mb-1"><i class="bi bi-at"></i> ${username}</p>` : ''}
+            ${email ? `<p class="text-secondary small mb-3"><i class="bi bi-envelope"></i> ${email}</p>` : ''}
+
+            <div class="d-flex gap-2 justify-content-center justify-content-sm-start flex-wrap">
+              <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2">
+                <i class="bi bi-file-post me-1"></i>
+                ${postsCount} ${postsCount === 1 ? 'Post' : 'Posts'}
+              </span>
+              <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2">
+                <i class="bi bi-chat-square-text me-1"></i>
+                ${commentsCount} ${commentsCount === 1 ? 'Comment' : 'Comments'}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProfilePosts(posts, user) {
+  if (!posts.length) {
+    return `
+      <div class="text-center py-5 text-secondary">
+        <i class="bi bi-file-post fs-1 d-block mb-2 opacity-50"></i>
+        <p class="fw-medium mb-1">No posts yet</p>
+        <small class="text-muted">
+          When ${escapeHTML(user.name || 'this user')} posts, it'll show up here.
+        </small>
+      </div>
+    `;
+  }
+
+  return posts.map(createPostCardHTML).join('');
+}
+
+// ==========================================
+// PROFILE PAGE RENDERER
+// ==========================================
+
+/**
+ * Fetches ONE page of the feed and keeps only this author's posts.
+ * Called on demand only — never in a loop.
+ */
+async function fetchProfileUser(userId) {
+  const res = await axios.get(`${API_BASE_URL}/users/${userId}`);
+  return res.data?.data || {};
+}
+
+/**
+ * Fetches ALL of a single user's posts via the dedicated endpoint.
+ * Safe to do in full because this is scoped to one user, not the whole feed.
+ */
+async function fetchAllUserPosts(userId) {
+  const firstRes = await axios.get(`${API_BASE_URL}/users/${userId}/posts`, {
+    params: { sortBy: 'created_at', orderBy: 'desc', page: 1 }
+  });
+
+  let posts = firstRes.data?.data || [];
+  const lastPage = firstRes.data?.meta?.last_page || 1;
+
+  if (lastPage > 1) {
+    const requests = [];
+    for (let p = 2; p <= lastPage; p++) {
+      requests.push(
+        axios.get(`${API_BASE_URL}/users/${userId}/posts`, {
+          params: { sortBy: 'created_at', orderBy: 'desc', page: p }
+        })
+      );
+    }
+    const responses = await Promise.all(requests);
+    responses.forEach(res => {
+      const pagePosts = res.data?.data || [];
+      posts = posts.concat(pagePosts);
+    });
+  }
+
+  return posts;
+}
+
+async function renderProfilePage(userId) {
+  const postsContainer = document.getElementById('ins-post');
+  const addPostContainer = document.getElementById('AddPostContainer');
+  const spinner = document.getElementById('loading-spinner');
+  if (!postsContainer) return;
+
+  if (addPostContainer) addPostContainer.innerHTML = '';
+  if (spinner) spinner.style.display = 'none';
+  postsContainer.innerHTML = renderFeedLoadingSkeleton();
+
+  try {
+    // 2 requests to start (user + posts page 1), plus one per extra page —
+    // bounded by this user's own post count, not the whole site.
+    const [user, posts] = await Promise.all([
+      fetchProfileUser(userId),
+      fetchAllUserPosts(userId)
+    ]);
+
+    user.posts_count = user.posts_count ?? user.postsCount ?? posts.length;
+
+    postsContainer.innerHTML = `
+      ${renderProfileHeader(user)}
+      <div class="d-flex align-items-center justify-content-between mb-3 px-1">
+        <h5 class="fw-bold mb-0">
+          <i class="bi bi-collection-fill text-primary me-2"></i>
+          ${escapeHTML(user.name || user.username || 'User')}'s Posts
+        </h5>
+        <span class="text-secondary small">
+          ${posts.length} ${posts.length === 1 ? 'post' : 'posts'}
+        </span>
+      </div>
+      <div id="profile-posts-feed">${renderProfilePosts(posts, user)}</div>
+    `;
+
+    state.profileUserId = userId;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  } catch (error) {
+    const status = error.response?.status;
+    const message =
+      status === 404
+        ? 'This user does not exist.'
+        : status === 429
+          ? 'Too many requests — please wait a moment and try again.'
+          : error.response?.data?.message || 'Could not load this profile.';
+
+    postsContainer.innerHTML = `
+      <div class="alert alert-danger text-center my-4 rounded-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>${escapeHTML(message)}
+      </div>
+      <div class="text-center">
+        <a href="#/" class="btn btn-primary rounded-pill px-4">
+          <i class="bi bi-house-door me-1"></i> Back to Home
+        </a>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Central hash router. Called on load and on every hashchange.
+ */
+async function handleProfilePage() {
+  const userId = parseProfileRoute();
+  const homeLink = document.getElementById('home-nav-link');
+  const profileLink = document.getElementById('profile-nav-link');
+
+  if (!userId) {
+    // -------- HOME ROUTE --------
+    state.currentRoute = 'home';
+    homeLink?.classList.add('active');
+    profileLink?.classList.remove('active');
+    renderCreatePostWidget();
+    fetchAndRenderPosts(1);
+    return;
+  }
+
+  // -------- PROFILE ROUTE --------
+  state.currentRoute = 'profile';
+  homeLink?.classList.remove('active');
+  profileLink?.classList.add('active');
+  await renderProfilePage(userId);
+}
+
+// ==========================================
 // SCROLL & GLOBAL EVENT LISTENERS
 // ==========================================
 
@@ -1183,45 +1433,63 @@ function attachGlobalEventListeners() {
   if (loginBtn) loginBtn.addEventListener('click', handleLogin);
   if (createPostBtn) createPostBtn.addEventListener('click', handleSharePost);
 
-  // Infinite Scroll Handler
+  // ---- Hash routing ----
+  window.addEventListener('hashchange', handleProfilePage);
+
+  // ---- Infinite scroll (home feed only) ----
   window.addEventListener('scroll', () => {
-    const reachedBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 350;
+    if (state.currentRoute === 'profile') return;
+
+    const reachedBottom =
+      window.innerHeight + window.scrollY >=
+      document.documentElement.scrollHeight - 350;
+
     if (reachedBottom && !state.isLoading && state.currentPage < state.lastPage) {
       fetchAndRenderPosts(state.currentPage + 1);
     }
   });
 
-  // Back To Top Scroll Handler
+  // ---- Back to top ----
   if (backToTopBtn) {
-    window.addEventListener("scroll", () => {
-      backToTopBtn.classList.toggle("show", window.scrollY > 400);
+    window.addEventListener('scroll', () => {
+      backToTopBtn.classList.toggle('show', window.scrollY > 400);
     });
-
-    backToTopBtn.addEventListener("click", () => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    backToTopBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   }
 
   const postsContainer = document.getElementById('ins-post');
-
   if (postsContainer) {
     postsContainer.addEventListener('click', (event) => {
-      const button = event.target.closest('[data-post-action]');
-      if (!button) return;
+      // --- Author click → go to that user's profile ---
+      const authorBtn = event.target.closest('.author-link');
+      if (authorBtn) {
+        const authorId = authorBtn.dataset.userId;
+        if (authorId) {
+          const me = getAuthenticatedUser();
+          const isMe = me && String(me.id) === String(authorId);
 
-      const postId = button.dataset.postId;
+          // Anyone can view any profile.
+          // If it's the signed-in user, no issue.
+          // If it's someone else, we still allow it.
+          window.location.hash = `#/profile/${authorId}`;
+        }
+        return;
+      }
+
+      // --- Post owner actions (edit / delete) ---
+      const actionBtn = event.target.closest('[data-post-action]');
+      if (!actionBtn) return;
+
+      const postId = actionBtn.dataset.postId;
       if (!postId) {
         renderToastAlert('No post was selected.', 'failed');
         return;
       }
 
-      if (button.dataset.postAction === 'edit') {
-        openUpdatePost(postId);
-      }
-
-      if (button.dataset.postAction === 'delete') {
-        openDeletePost(postId);
-      }
+      if (actionBtn.dataset.postAction === 'edit') openUpdatePost(postId);
+      if (actionBtn.dataset.postAction === 'delete') openDeletePost(postId);
     });
   }
 }
@@ -1236,6 +1504,12 @@ document.addEventListener('DOMContentLoaded', () => {
   updateNavigationUI();
   renderCreatePostWidget();
   initializeCommentForm();
-  fetchAndRenderPosts(1);
   attachGlobalEventListeners();
+
+  // Decide initial route from the hash
+  if (!window.location.hash) {
+    window.location.hash = '#/';      // fires hashchange → handleProfilePage()
+  } else {
+    handleProfilePage();              // deep-link into a profile
+  }
 });

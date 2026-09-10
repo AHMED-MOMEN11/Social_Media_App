@@ -637,3 +637,16 @@ a:focus-visible,
       0 12px 32px rgba(var(--bs-primary-rgb), 0.15);
   }
 }
+
+.author-link {
+  border-radius: 8px;
+  padding: 4px 6px;
+  transition: background-color .15s ease;
+}
+.author-link:hover {
+  background-color: var(--bs-tertiary-bg);
+}
+.author-link:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
