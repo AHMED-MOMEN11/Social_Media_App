@@ -3,7 +3,8 @@
 // ==========================================
 import axios from "axios";
 import './style.css';
-import '../node_modules/bootstrap/dist/js/bootstrap.min.js';
+import * as bootstrap from 'bootstrap';
+window.bootstrap = bootstrap;
 
 // ==========================================
 // CONFIGURATION & GLOBAL STATE
