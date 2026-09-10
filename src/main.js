@@ -9,7 +9,7 @@ import '../node_modules/bootstrap/dist/js/bootstrap.min.js';
 // CONFIGURATION & GLOBAL STATE
 // ==========================================
 const API_BASE_URL = 'https://tarmeezacademy.com/api/v1';
-const FALLBACK_AVATAR = '../public/ProfilePics/profile-icon-design-free-vector.jpg';
+const FALLBACK_AVATAR = '/ProfilePics/profile-icon-design-free-vector.jpg';
 
 const state = {
   token: localStorage.getItem('Token') || '',
@@ -493,7 +493,7 @@ function updateNavigationUI() {
     const logoutHTML = `
       <div id="logout-container" class="d-flex align-items-center">
         <span class="text-muted fw-medium me-2 text-truncate">${escapeHTML(userData.username)}</span>
-        <img src="${userData.profile_image}" 
+        <img src="${getAvatarUrl(userData.profile_image)}" 
              alt="avatar" 
              class="rounded-circle border border-2 border-primary-subtle" 
              style="width: 42px; height: 42px; object-fit: cover;" 
@@ -538,7 +538,7 @@ function renderCreatePostWidget() {
     <div class="card border-0 shadow-sm rounded-4 p-3 mb-4 bg-body-tertiary">
       <div class="d-flex align-items-center gap-3">
         <img id="create-post-user-avatar" 
-             src="${userData.profile_image}"
+             src="${getAvatarUrl(userData.profile_image)}"
              onerror="this.onerror=null; this.src='${FALLBACK_AVATAR}';"
              alt="User Avatar" 
              class="rounded-circle border border-2 border-primary-subtle"
@@ -552,6 +552,13 @@ function renderCreatePostWidget() {
       </div>
     </div>
   `;
+}
+
+function getAvatarUrl(image) {
+  if (image && typeof image === 'string' && image.trim() !== '' && image !== '[object Object]') {
+    return image;
+  }
+  return FALLBACK_AVATAR;
 }
 
 // ==========================================
