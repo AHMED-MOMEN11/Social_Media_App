@@ -720,7 +720,7 @@ function createPostCardHTML(post) {
     <article id="post-${post.id}" class="card border-0 shadow-sm rounded-4 overflow-hidden mb-4 bg-white">
   <div class="card-header bg-white border-0 d-flex align-items-center justify-content-between pt-3 px-3">
     <div class="d-flex align-items-center gap-2">
-      <img src="${post.author.profile_image}" 
+      <img src="${getAvatarUrl(post.author.profile_image)}" 
            alt="avatar" 
            class="rounded-circle border border-2 border-primary-subtle" 
            style="width: 42px; height: 42px; object-fit: cover;" 
